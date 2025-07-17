@@ -5,48 +5,33 @@ const slugify = require("slugify");
 
 exports.createProduct = async (req, res, next) => {
   try {
-    const {
-      title,
-      description,
-      categories,
-      width,
-      height,
-      gridSize,
-      active,
-      isFavorited,
-      type,
-      created_at,
-      updated_at
-    } = req.body;
-
-    if (!title || !gridSize || !type) {
-      return res.status(400).json(error("Missing required fields"));
-    }
+    const { title, description, categories, width, height, gridSize, type } =
+      req.body;
 
     const slug = slugify(title, { lower: true, strict: true });
+    const filename = req.file.filename;
+    const imagePath = `maps/${slug}/${filename}`;
 
-    const imagePath = req.file?.path.replace(/\\/g, "/").replace(/^uploads\//, ""); 
-
-    const product = await Product.create({
+    const newProduct = new Product({
       title,
       description,
-      categories: categories ? categories.split(",").map(c => c.trim()) : [],
+      categories: Array.isArray(categories) ? categories : [categories],
+      image: imagePath,
       dimensions: {
-        width: parseInt(width) || 0,
-        height: parseInt(height) || 0
+        width: parseInt(width),
+        height: parseInt(height),
       },
       gridSize: parseInt(gridSize),
-      active: active === "true" || active === true,
-      isFavorited: isFavorited ? isFavorited.split(",").map(Number) : [],
+      active: false,
+      isFavorited: [],
       type,
-      image: imagePath,
-      created_at: created_at ? new Date(created_at) : new Date(),
-      updated_at: updated_at ? new Date(updated_at) : new Date()
     });
 
-    res.status(201).json(success("Product created", product));
+    const saved = await newProduct.save();
+    res.status(201).json({ success: true, data: saved });
   } catch (err) {
-    next(err);
+    console.error("Create product error:", err.message);
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
