@@ -1,12 +1,15 @@
 const { Resend } = require("resend");
+const jwt = require("jsonwebtoken");
+
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 const adminEmail = process.env.ADMIN_EMAIL;
 const adminPassword = process.env.ADMIN_PASSWORD;
 const fromEmail = process.env.RESEND_FROM;
+const jwtSecret = process.env.JWT_SECRET;
 
 let currentOTP = "";
-let otpTimestamp = 0; 
+let otpTimestamp = 0;
 
 exports.loginWithPassword = async (req, res) => {
   const { email, password } = req.body;
@@ -15,6 +18,7 @@ exports.loginWithPassword = async (req, res) => {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
+  // Generate OTP 6 digit
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   currentOTP = otp;
   otpTimestamp = Date.now();
@@ -34,19 +38,26 @@ exports.loginWithPassword = async (req, res) => {
   }
 };
 
-exports.verifyOTP = (req, res) => {
+exports.verifyOTP = async (req, res) => {
   const { email, otp } = req.body;
 
-
-  if (Date.now() - otpTimestamp > 5 * 60 * 1000) {
-    currentOTP = "";
-    return res.status(400).json({ message: "OTP expired" });
+  const now = Date.now();
+  if (
+    email !== adminEmail ||
+    otp !== currentOTP ||
+    now - otpTimestamp > 5 * 60 * 1000
+  ) {
+    return res.status(401).json({ message: "Invalid or expired OTP" });
   }
 
-  if (email !== adminEmail || otp !== currentOTP) {
-    return res.status(401).json({ message: "Invalid OTP or email" });
-  }
+  const token = jwt.sign({ email }, jwtSecret, { expiresIn: "1h" });
 
-  currentOTP = "";
+  res.cookie("admin_token", token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production", 
+    sameSite: "Lax", 
+    maxAge: 60 * 60 * 1000, 
+  });
+
   return res.json({ message: "Login success" });
 };
